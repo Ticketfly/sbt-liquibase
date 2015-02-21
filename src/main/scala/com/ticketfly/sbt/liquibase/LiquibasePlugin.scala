@@ -5,6 +5,7 @@ import java.text.SimpleDateFormat
 
 import liquibase.Liquibase
 import liquibase.database.Database
+import liquibase.diff.output.DiffOutputControl
 import liquibase.integration.commandline.CommandLineUtils
 import liquibase.resource.FileSystemResourceAccessor
 import sbt.Keys._
@@ -54,8 +55,22 @@ object LiquibasePlugin extends Plugin {
 
     liquibaseDatabase <<= (liquibaseUrl, liquibaseUsername, liquibasePassword, liquibaseDriver, liquibaseDefaultSchemaName, fullClasspath in Runtime) map {
       (url: String, uname: String, pass: String, driver: String, schemaName: String, cpath) =>
-        //CommandLineUtils.createDatabaseObject( ClasspathUtilities.toLoader(cpath.map(_.data)) ,url, uname, pass, driver, schemaName, null,null)
-        CommandLineUtils.createDatabaseObject(ClasspathUtilities.toLoader(cpath.map(_.data)), url, uname, pass, driver, null, null, null)
+        CommandLineUtils.createDatabaseObject(
+          ClasspathUtilities.toLoader(cpath.map(_.data)),
+          url,
+          uname,
+          pass,
+          driver,
+          null,   // defaultCatalogName
+          null,   // defaultSchemaName
+          false,  // outputDefaultCatalog
+          false,  // outputDefaultSchema
+          null,   // databaseClass
+          null,   // driverPropertiesFile,
+          null,   // propertyProviderClass,
+          null,   // liquibaseCatalogName,
+          null    // liquibaseSchemaName
+        )
     },
 
     liquibase <<= (liquibaseChangelog, liquibaseDatabase) map {
@@ -69,7 +84,11 @@ object LiquibasePlugin extends Plugin {
     },
 
     liquibaseStatus <<= liquibase map {
-      _.reportStatus(true, null, new LoggerWriter(ConsoleLogger()))
+      _.reportStatus(
+        true, // verbose
+        "", // contexts
+        new LoggerWriter(ConsoleLogger())
+      )
     },
 
     liquibaseClearChecksums <<= liquibase map {
@@ -86,27 +105,27 @@ object LiquibasePlugin extends Plugin {
 
     liquibaseRollback <<= inputTask { (argTask) =>
       (streams, liquibase, argTask) map { (out, lbase, args: Seq[String]) =>
-        lbase.rollback(args.head, null)
+        lbase.rollback(args.head, "", out.text())
         out.log("Rolled back to tag %s".format(args.head))
       }
     },
 
     liquibaseRollbackCount <<= inputTask { (argTask) =>
       (streams, liquibase, argTask) map { (out, lbase, args: Seq[String]) =>
-        lbase.rollback(args.head.toInt, null)
+        lbase.rollback(args.head.toInt, "", out.text())
         out.log("Rolled back to count %s".format(args.head))
       }
     },
 
     liquibaseRollbackSql <<= inputTask { (argTask) =>
       (streams, liquibase, argTask) map { (out, lbase, args: Seq[String]) =>
-        lbase.rollback(args.head, null, out.text())
+        lbase.rollback(args.head, "", out.text())
       }
     },
 
     liquibaseRollbackCountSql <<= inputTask { (argTask) =>
       (streams, liquibase, argTask) map { (out, lbase, args: Seq[String]) =>
-        lbase.rollback(args.head.toInt, null, out.text())
+        lbase.rollback(args.head.toInt, "", out.text())
       }
     },
 
@@ -136,8 +155,19 @@ object LiquibasePlugin extends Plugin {
     },
 
     liquibaseGenerateChangelog <<= (streams, liquibase, liquibaseChangelog, liquibaseDefaultSchemaName, baseDirectory) map { (out, lbase, clog, sname, bdir) =>
-      //CommandLineUtils.doGenerateChangeLog(clog, lbase.getDatabase(), sname, null,null,null, bdir / "src" / "main" / "migrations" absolutePath )
-      CommandLineUtils.doGenerateChangeLog(clog, lbase.getDatabase(), null, null, null, null, bdir / "src" / "main" / "migrations" absolutePath)
+      val diffOutputControl = new DiffOutputControl(false, false, false)
+      CommandLineUtils.doGenerateChangeLog(
+        clog, // changeLogFile
+        lbase.getDatabase, // originalDatabase
+        null, // catalogName
+        null, // schemaName
+        null, // snapshotTypes
+        null, // author
+        null, // context
+        null, // dataDir
+        diffOutputControl
+        // bdir / "src" / "main" / "migrations" absolutePath
+      )
     },
 
     liquibaseChangelogSyncSql <<= (streams, liquibase) map { (out, lbase) =>
